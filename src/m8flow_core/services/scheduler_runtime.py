@@ -19,6 +19,7 @@ from m8flow_core.models.scheduler_job import SchedulerJobModel, SchedulerJobType
 from m8flow_core.models.tenant import M8flowTenantModel
 from m8flow_core.models.user import UserModel
 from m8flow_core.services.authorization import ROLE_ADMIN, ensure_v1_role
+from m8flow_core.services.message_subscriptions import lock_message_enabled_instance
 from m8flow_core.services.process_instance_reactivation import (
     retry_process_instance,
 )
@@ -50,12 +51,42 @@ def claim_due_scheduler_jobs(
     occurred_at = _resolve_timestamp(now)
     claimed_jobs: list[SchedulerJobModel] = []
 
-    for job in list_due_scheduler_jobs(
+    due_jobs = list_due_scheduler_jobs(
         session,
         now=occurred_at,
         limit=limit,
         tenant_id=tenant_id,
-    ):
+    )
+    # Lock instances before writing their job rows, in the same order used
+    # by message delivery when it synchronizes timers.
+    instance_keys = {
+        (job.m8f_tenant_id, job.process_instance_id)
+        for job in due_jobs
+        if job.process_instance_id is not None
+    }
+    locked_instances = {
+        (job_tenant, instance_id)
+        for job_tenant, instance_id in sorted(instance_keys)
+        if lock_message_enabled_instance(session, job_tenant, instance_id) is not None
+    }
+    for job in due_jobs:
+        if (job.m8f_tenant_id, job.process_instance_id) in locked_instances:
+            # A message may have changed or deleted this job while the
+            # scheduler was waiting for the instance lock.
+            current = session.scalar(
+                select(SchedulerJobModel)
+                .where(
+                    SchedulerJobModel.id == job.id,
+                    SchedulerJobModel.m8f_tenant_id == job.m8f_tenant_id,
+                    SchedulerJobModel.locked_by.is_(None),
+                    SchedulerJobModel.run_at <= occurred_at,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if current is None:
+                continue
+            job = current
         job.locked_by = normalized_worker_id
         job.locked_at = occurred_at
         job.updated_at = occurred_at

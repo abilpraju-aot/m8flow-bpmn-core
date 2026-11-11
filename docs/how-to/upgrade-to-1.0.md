@@ -102,25 +102,24 @@ Pick the path that matches your database:
 | Database | What to do |
 |---|---|
 | Empty | Run `alembic upgrade head`. See [Create a new database](#create-a-new-database). |
-| Version row already reads `k2l3m4n5o6p7` | Don't run or stamp anything. Alembic already treats the database as current. Run `alembic check` to confirm the schema matches. |
+| Version row already reads `k2l3m4n5o6p7` | Run `alembic upgrade head` to apply any revisions released after the 1.0 baseline. |
 | 0.x schema | Convert it with the 0.x migrations and your own migrations, then stamp. See [Convert a 0.x database](#convert-a-0x-database). |
 
 ### Create a new database
 
-Run the baseline against the empty database, then confirm the revision:
+Apply all available revisions to the empty database, then confirm the revision:
 
 ```bash
 uv run alembic upgrade head
 uv run alembic current
 ```
 
-The second command must print `k2l3m4n5o6p7 (head)`.
+Compare the reported revision with `uv run alembic heads`.
 
 ### Check a database that is already at `k2l3m4n5o6p7`
 
-The baseline keeps the revision ID `k2l3m4n5o6p7`. If a database's
-`alembic_version` row already holds that value, `alembic upgrade head` has
-nothing to do, and `alembic stamp` isn't needed.
+When `alembic_version` already holds `k2l3m4n5o6p7`, use
+`alembic upgrade head` to apply subsequent revisions.
 
 The revision ID alone doesn't prove the tables match the 1.0 models. A
 database built before the baseline can still differ in details such as extra

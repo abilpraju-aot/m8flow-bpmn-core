@@ -17,6 +17,7 @@ from m8flow_core.application.commands import (
     ClaimTaskCommand,
     CompleteTaskCommand,
     CreateProcessInstanceCommand,
+    DeliverMessageCommand,
     ErrorProcessInstanceCommand,
     ImportBpmnProcessDefinitionCommand,
     InitializeProcessInstanceFromDefinitionCommand,
@@ -54,6 +55,7 @@ PROCESS_DEFINITION_IMPORT_COMMAND = "process_definition.import"
 PROCESS_WORKFLOW_INITIALIZE_COMMAND = "process.initialize_workflow"
 PROCESS_METADATA_UPSERT_COMMAND = "process.metadata.upsert"
 PROCESS_EVENT_RECORD_COMMAND = "process.event.record"
+PROCESS_MESSAGE_DELIVER_COMMAND = "process.message.deliver"
 PROCESS_SUSPEND_COMMAND = "process.suspend"
 PROCESS_RESUME_COMMAND = "process.resume"
 PROCESS_ERROR_COMMAND = "process.error"
@@ -117,6 +119,12 @@ AuthorizationPolicyFactory = Callable[[], AuthorizationPolicy]
 
 
 COMMAND_AUTHORIZATION_SPECS: dict[type[object], CommandAuthorizationSpec] = {
+    DeliverMessageCommand: CommandAuthorizationSpec(
+        command_key=PROCESS_MESSAGE_DELIVER_COMMAND,
+        permission=PermissionAction.execute.value,
+        resource_type=RESOURCE_TENANT,
+        actor_field_name="user_id",
+    ),
     ClaimTaskCommand: CommandAuthorizationSpec(
         command_key=TASK_CLAIM_COMMAND,
         permission=PermissionAction.execute.value,
@@ -858,6 +866,7 @@ __all__ = [
     "COMMAND_AUTHORIZATION_SPECS_BY_KEY",
     "CommandAuthorizationSpec",
     "DatabaseAuthorizationPolicy",
+    "PROCESS_MESSAGE_DELIVER_COMMAND",
     "PROCESS_START_COMMAND",
     "ROLE_ADMIN",
     "ROLE_MANAGER",

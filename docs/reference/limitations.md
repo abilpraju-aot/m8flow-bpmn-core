@@ -15,6 +15,7 @@ The library covers the following:
   history
 - Suspending, resuming, erroring, retrying, and terminating process instances
 - Timers and scheduled retries, through a scheduler loop you run
+- External correlation to intermediate BPMN message catches
 - Synchronous service tasks through pluggable connectors
 - Tenant membership checks and command permissions for the main workflow
   commands
@@ -24,7 +25,7 @@ The library covers the following:
 
 The library checks tenant membership and command permissions for
 `process_definition.import`, `process.start`, `task.claim`, `task.complete`,
-`process.suspend`, `process.resume`, `process.retry`, and
+`process.suspend`, `process.resume`, `process.retry`, `process.message.deliver`, and
 `process.terminate`. Grants target exact resources, such as one process model,
 or a whole resource type or tenant.
 
@@ -50,7 +51,8 @@ Missing:
 
 Service tasks run synchronously through registered connectors, including the
 `m8flow-connector-proxy` adapter. A failure on start, timer wake-up, or retry
-is saved durably and can be retried.
+can be saved durably and retried. For message-enabled instances, the caller's
+transaction also controls service-task failures.
 
 Missing:
 
@@ -106,19 +108,19 @@ Missing:
 
 ## Messaging and correlation
 
-The library doesn't support BPMN messaging.
+The library delivers an external JSON message to one waiting intermediate catch
+using [BPMN correlation keys](bpmn-support.md#external-message-catches).
+An early delivery returns `NotFoundError`. The host owns broker acknowledgments,
+retries, and transport adapters.
 
 Missing:
 
 - **Message start events**, which start a process from an inbound message such
   as `invoice.received` instead of an explicit start command.
-- **Intermediate message events**, such as sending `payment.requested` and
-  waiting for `payment.confirmed` before continuing.
+- **Boundary message events** and **receive tasks**.
 - **Signal events**, which broadcast to every listening instance at once.
-- **Correlation keys and subscriptions**, which match an inbound payload such
-  as `order_id=123` to the instance waiting for it.
-- **Inbound message routing**, an entry point that turns a webhook or event-bus
-  message into "resume this instance at this catch event".
+- **Camunda migration mappings**, such as business-key correlation and its
+  REST API.
 - **Outbound delivery** of thrown messages and signals to email, Kafka, or
   other subscribers.
 

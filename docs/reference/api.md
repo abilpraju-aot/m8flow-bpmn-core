@@ -296,6 +296,43 @@ Raises:
 - `ServiceTaskExecutionError` if the workflow advances into a service task and
   the connector fails.
 
+### `DeliverMessageCommand`
+
+Correlates an inbound message to one waiting intermediate BPMN message catch.
+Returns the matching `ProcessInstanceModel` after advancing the workflow to
+its next wait or completion. The continuation receives the JSON object as
+`message_payload`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `tenant_id` | `str` | Yes | Tenant that owns the wait and delivery receipt |
+| `delivery_id` | `str` | Yes | Stable message ID, unique within the tenant, up to 255 characters |
+| `message_name` | `str` | Yes | Exact BPMN `message` name |
+| `user_id` | `int` | Yes | Tenant member with `process.message.deliver` permission |
+| `payload` | `dict[str, Any]` | Yes | JSON object containing the modeled correlation fields and any additional message data |
+| `bpmn_process_definition_id` | `int \| None` | No | Restricts the lookup to this stored definition |
+| `process_instance_id` | `int \| None` | No | Restricts the lookup to this instance |
+
+Both filters apply when supplied. All key fields must match, including their
+types. Suspended, errored, terminated, and completed instances are ineligible
+for new deliveries. Replaying a committed delivery ID with the same message
+name, JSON payload, and target filters returns the original instance in its
+current state. JSON object field order is immaterial.
+
+Use `execute_command` with a `Session` or `Connection`, or call
+`deliver_message(session, ...)` with the same keyword arguments. Commit the
+caller-owned transaction before acknowledging the message. A failed
+continuation rolls back the attempt and leaves the wait available.
+
+- `AuthorizationError` if the user is outside the tenant or lacks permission.
+- `NotFoundError` if the user is unknown or no eligible wait matches. You can
+  retry an early message with the same delivery ID.
+- `InvalidStateError` if more than one wait matches or the continuation fails
+  in the BPMN runtime.
+- `ValidationError` for malformed inputs or a committed delivery ID reused
+  with different inputs.
+- `ServiceTaskExecutionError` if the continuation invokes a failing connector.
+
 ### `UpsertProcessInstanceMetadataCommand`
 
 Creates or updates one metadata key and value on a process instance.
@@ -540,6 +577,7 @@ are the following:
 |---|---|---|---|
 | `PROCESS_DEFINITION_IMPORT_COMMAND` | `"process_definition.import"` | `process_definition` | The `bpmn_identifier` |
 | `PROCESS_START_COMMAND` | `"process.start"` | `process_model` | The process model identifier |
+| `PROCESS_MESSAGE_DELIVER_COMMAND` | `"process.message.deliver"` | `tenant` | The tenant ID |
 | `PROCESS_SUSPEND_COMMAND` | `"process.suspend"` | `process_instance` | The instance ID |
 | `PROCESS_RESUME_COMMAND` | `"process.resume"` | `process_instance` | The instance ID |
 | `PROCESS_RETRY_COMMAND` | `"process.retry"` | `process_instance` | The instance ID |

@@ -25,6 +25,7 @@ from m8flow_core.services.lane_assignment import (
     enroll_definition_lane_owners,
     validate_initiator_lanes,
 )
+from m8flow_core.services.message_correlation import compile_message_catches
 from m8flow_core.services.tenant_users import ensure_user_belongs_to_tenant
 from m8flow_core.services.workflow_runtime import (
     _sync_timer_start_scheduler_jobs_for_definition,
@@ -249,6 +250,7 @@ def _validate_bpmn_source(
     """
     parser = SpiffBpmnParser(validator=None)
     try:
+        compile_message_catches(bpmn_xml_text.encode("utf-8"))
         parser.add_bpmn_str(
             bpmn_xml_text.encode("utf-8"),
             filename="import-validation.bpmn",

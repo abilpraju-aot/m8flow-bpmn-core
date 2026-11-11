@@ -19,6 +19,7 @@ from m8flow_core.models.user import UserModel
 from m8flow_core.settings import get_settings
 
 BASELINE_REVISION = "k2l3m4n5o6p7"
+MESSAGE_CORRELATION_REVISION = "9c2e8f415b70"
 
 POSTGRES_URL = os.getenv("M8FLOW_POSTGRES_UPGRADE_DATABASE_URL", "")
 
@@ -94,14 +95,17 @@ def _table_names(database_url: str) -> set[str]:
         engine.dispose()
 
 
-def test_migration_history_is_a_single_baseline() -> None:
+def test_message_correlation_migration_follows_the_baseline() -> None:
     script = ScriptDirectory.from_config(_alembic_config())
 
     revisions = list(script.walk_revisions())
 
-    assert [revision.revision for revision in revisions] == [BASELINE_REVISION]
-    assert script.get_heads() == [BASELINE_REVISION]
-    assert revisions[0].down_revision is None
+    assert [revision.revision for revision in revisions] == [
+        MESSAGE_CORRELATION_REVISION,
+        BASELINE_REVISION,
+    ]
+    assert script.get_heads() == [MESSAGE_CORRELATION_REVISION]
+    assert revisions[1].down_revision is None
 
 
 _DATABASES = [
@@ -126,6 +130,8 @@ def test_baseline_upgrade_matches_models_and_downgrade_removes_tables(
 ) -> None:
     config = _alembic_config()
 
+    command.upgrade(config, BASELINE_REVISION)
+    assert "message_subscription" not in _table_names(migration_database)
     command.upgrade(config, "head")
 
     engine = sa.create_engine(migration_database)
@@ -133,7 +139,7 @@ def test_baseline_upgrade_matches_models_and_downgrade_removes_tables(
         with engine.connect() as connection:
             assert (
                 connection.scalar(sa.text("SELECT version_num FROM alembic_version"))
-                == BASELINE_REVISION
+                == MESSAGE_CORRELATION_REVISION
             )
             inspector = sa.inspect(connection)
             for table_name, expected in NAMED_CHECK_CONSTRAINTS.items():
@@ -147,6 +153,10 @@ def test_baseline_upgrade_matches_models_and_downgrade_removes_tables(
     assert _schema_diff(migration_database) == []
     command.check(config)
 
+    command.downgrade(config, BASELINE_REVISION)
+    baseline_tables = _table_names(migration_database)
+    assert "process_instance" in baseline_tables
+    assert baseline_tables.isdisjoint({"message_subscription", "message_delivery"})
     command.downgrade(config, "base")
 
     remaining = _table_names(migration_database)

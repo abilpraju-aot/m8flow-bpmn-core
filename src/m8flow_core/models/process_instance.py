@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String, false
 from sqlalchemy.orm import (
     Mapped,
     mapped_column,
@@ -70,6 +70,9 @@ class ProcessInstanceModel(M8fTenantScopedMixin, TenantScoped, Base):
         index=True,
     )
     workflow_engine_version: Mapped[str | None] = mapped_column(String(50))
+    message_correlation_enabled: Mapped[bool] = mapped_column(
+        default=False, server_default=false()
+    )
     status: Mapped[str] = mapped_column(
         String(50), index=True, nullable=False, default="running"
     )

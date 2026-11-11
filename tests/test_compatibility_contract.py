@@ -11,6 +11,7 @@ from m8flow_core.application.commands import (
     ClaimTaskCommand,
     CompleteTaskCommand,
     CreateProcessInstanceCommand,
+    DeliverMessageCommand,
     ImportBpmnProcessDefinitionCommand,
     InitializeProcessInstanceFromDefinitionCommand,
     InitializeProcessInstanceWorkflowCommand,
@@ -65,6 +66,15 @@ EXPECTED_COMMAND_FIELDS = {
         "process_version",
         "created_at",
         "updated_at",
+    ],
+    DeliverMessageCommand: [
+        "tenant_id",
+        "delivery_id",
+        "message_name",
+        "user_id",
+        "payload",
+        "bpmn_process_definition_id",
+        "process_instance_id",
     ],
     ImportBpmnProcessDefinitionCommand: [
         "tenant_id",
@@ -202,6 +212,8 @@ def test_schema_table_names_are_compatible_baseline() -> None:
         "process_instance_event",
         "process_instance_metadata",
         "scheduler_job",
+        "message_subscription",
+        "message_delivery",
     }
     assert expected_tables.issubset(Base.metadata.tables)
 

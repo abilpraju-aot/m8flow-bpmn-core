@@ -115,12 +115,16 @@ again, the instance goes back to `error` with a new `task_failed` and
 `RetryProcessInstanceCommand` or schedule one with
 `ScheduleProcessInstanceRetryCommand`.
 
-### The exception: after a task is completed
+### Task completion and message-enabled instances
 
 Service tasks that run after `CompleteTaskCommand` don't get the separate
 transaction yet. Their failure state is part of the caller's transaction. If
 the caller rolls back, the task completion and the failure state roll back
 together, and the task stays uncompleted.
+
+Instances with external message catches also keep service-task failures in
+the caller's transaction. A failed message delivery rolls back its own
+attempt, including its receipt, so the host can retry the message.
 
 ### Database support
 

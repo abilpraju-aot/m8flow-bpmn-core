@@ -29,6 +29,7 @@ from m8flow_core.services.authorization import (
     TASK_COMPLETE_COMMAND,
     require_command_authorization,
 )
+from m8flow_core.services.message_subscriptions import lock_message_enabled_instance
 from m8flow_core.services.process_instances import (
     record_process_instance_event,
     upsert_process_instance_metadata,
@@ -127,6 +128,7 @@ def claim_task(
         resource_id=item.task_guid or str(item.id),
         metadata=_task_authorization_metadata(item),
     )
+    _lock_work_item_for_message(session, tenant_id, item)
     if item.completed:
         raise InvalidStateError("Cannot claim a completed task")
     if not _user_is_assigned(session, tenant_id, item.id, user_id):
@@ -182,6 +184,7 @@ def complete_task(
         resource_id=item.task_guid or str(item.id),
         metadata=_task_authorization_metadata(item),
     )
+    _lock_work_item_for_message(session, tenant_id, item)
     if item.completed:
         raise InvalidStateError("Task is already completed")
     if not _user_is_assigned(session, tenant_id, item.id, user_id):
@@ -258,6 +261,22 @@ def _load_work_item(
             f"Work item {work_item_id} was not found for tenant {tenant_id}"
         )
     return item
+
+
+def _lock_work_item_for_message(
+    session: Session, tenant_id: str, item: WorkItemModel
+) -> None:
+    instance = lock_message_enabled_instance(
+        session, tenant_id, item.process_instance_id
+    )
+    if instance is None:
+        return
+    if (
+        instance.has_terminal_status()
+        or instance.status == ProcessInstanceStatus.suspended.value
+    ):
+        raise InvalidStateError("The process instance is inactive")
+    session.refresh(item, with_for_update=True)
 
 
 def _user_is_assigned(

@@ -198,6 +198,35 @@ The [errors section of the API reference](../reference/api.md#errors) lists
 which errors each command and query raises. To see every error raised for
 real, run `uv run python examples/errors_demo.py`.
 
+## Deliver an external message
+
+Grant your integration user `execute` on
+`api.PROCESS_MESSAGE_DELIVER_COMMAND` for resource type `tenant` and resource
+ID `tenant_id`. Give each message a stable delivery ID and include the
+fields declared by the BPMN [correlation key](../reference/bpmn-support.md#external-message-catches).
+For example, the payment model matches `case_id` and `region`.
+
+```python
+with engine.begin() as connection:
+    instance = api.execute_command(
+        connection,
+        api.DeliverMessageCommand(
+            tenant_id=tenant_id,
+            delivery_id=incoming_message_id,
+            message_name="payment.confirmed",
+            user_id=integration_user_id,
+            payload={"case_id": "case-42", "region": "west", "amount": 125},
+        ),
+    )
+acknowledge(incoming_message_id)
+```
+
+When a message arrives early, retry `NotFoundError` in the host using the
+same delivery ID. If the command reports multiple eligible catches, use a
+definition or instance filter when your application knows the intended
+target. See the [delivery command reference](../reference/api.md#delivermessagecommand)
+for replay and failure behavior.
+
 ## Show instances in the m8flow UI
 
 If your application shares a database with an m8flow backend, use the same

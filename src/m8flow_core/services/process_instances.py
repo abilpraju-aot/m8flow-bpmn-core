@@ -30,6 +30,10 @@ from m8flow_core.services.authorization import (
     PROCESS_TERMINATE_COMMAND,
     require_command_authorization,
 )
+from m8flow_core.services.message_subscriptions import (
+    lock_message_enabled_instance,
+    remove_message_subscriptions,
+)
 from m8flow_core.services.scheduler_jobs import (
     build_scheduler_job_key,
     delete_scheduler_job,
@@ -260,7 +264,10 @@ def suspend_process_instance(
         user_id=user_id,
     )
     process_instance = _load_process_instance(
-        session, tenant_id=tenant_id, process_instance_id=process_instance_id
+        session,
+        tenant_id=tenant_id,
+        process_instance_id=process_instance_id,
+        lock_for_message=True,
     )
     require_command_authorization(
         session,
@@ -305,7 +312,10 @@ def error_process_instance(
             user_id=user_id,
         )
     process_instance = _load_process_instance(
-        session, tenant_id=tenant_id, process_instance_id=process_instance_id
+        session,
+        tenant_id=tenant_id,
+        process_instance_id=process_instance_id,
+        lock_for_message=True,
     )
     if process_instance.status == ProcessInstanceStatus.error.value:
         return process_instance
@@ -355,7 +365,10 @@ def schedule_process_instance_retry(
         user_id=user_id,
     )
     process_instance = _load_process_instance(
-        session, tenant_id=tenant_id, process_instance_id=process_instance_id
+        session,
+        tenant_id=tenant_id,
+        process_instance_id=process_instance_id,
+        lock_for_message=True,
     )
     require_command_authorization(
         session,
@@ -404,7 +417,10 @@ def terminate_process_instance(
         user_id=user_id,
     )
     process_instance = _load_process_instance(
-        session, tenant_id=tenant_id, process_instance_id=process_instance_id
+        session,
+        tenant_id=tenant_id,
+        process_instance_id=process_instance_id,
+        lock_for_message=True,
     )
     require_command_authorization(
         session,
@@ -426,6 +442,7 @@ def terminate_process_instance(
 
     occurred_at = _resolve_timestamp(terminated_at)
     process_instance.status = ProcessInstanceStatus.terminated.value
+    remove_message_subscriptions(session, process_instance)
     process_instance.ended_at = occurred_at
     process_instance.updated_at = occurred_at
     _close_process_instance_runtime_state(
@@ -542,8 +559,16 @@ def get_process_instance_metadata(
 
 
 def _load_process_instance(
-    session: Session, *, tenant_id: str, process_instance_id: int
+    session: Session,
+    *,
+    tenant_id: str,
+    process_instance_id: int,
+    lock_for_message: bool = False,
 ) -> ProcessInstanceModel:
+    if lock_for_message:
+        locked = lock_message_enabled_instance(session, tenant_id, process_instance_id)
+        if locked is not None:
+            return locked
     process_instance = session.scalar(
         select(ProcessInstanceModel).where(
             ProcessInstanceModel.m8f_tenant_id == tenant_id,

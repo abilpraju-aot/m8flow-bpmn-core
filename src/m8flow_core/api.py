@@ -18,6 +18,7 @@ from m8flow_core.application import (
     ClaimTaskCommand,
     CompleteTaskCommand,
     CreateProcessInstanceCommand,
+    DeliverMessageCommand,
     ErrorProcessInstanceCommand,
     GetPendingTasksQuery,
     GetProcessInstanceEventsQuery,
@@ -58,6 +59,7 @@ from m8flow_core.models.process_instance_event import (
 )
 from m8flow_core.services.authorization import (
     PROCESS_DEFINITION_IMPORT_COMMAND,
+    PROCESS_MESSAGE_DELIVER_COMMAND,
     PROCESS_RESUME_COMMAND,
     PROCESS_RETRY_COMMAND,
     PROCESS_START_COMMAND,
@@ -85,6 +87,7 @@ from m8flow_core.services.connector_proxy_service_tasks import (
     fetch_connector_proxy_command_definitions,
 )
 from m8flow_core.services.lane_assignment import resolve_lane_assignment_id
+from m8flow_core.services.message_delivery import deliver_message
 from m8flow_core.services.process_instance_reactivation import (
     resume_process_instance,
     retry_process_instance,
@@ -165,6 +168,7 @@ __all__ = [
     "CompleteTaskCommand",
     "ConnectorProxyServiceTaskConnector",
     "CreateProcessInstanceCommand",
+    "DeliverMessageCommand",
     "DatabaseAuthorizationPolicy",
     "ErrorProcessInstanceCommand",
     "GetPendingTasksQuery",
@@ -181,6 +185,7 @@ __all__ = [
     "ListTerminatedProcessInstancesQuery",
     "NotFoundError",
     "PROCESS_DEFINITION_IMPORT_COMMAND",
+    "PROCESS_MESSAGE_DELIVER_COMMAND",
     "PROCESS_RESUME_COMMAND",
     "PROCESS_RETRY_COMMAND",
     "PROCESS_START_COMMAND",
@@ -218,6 +223,7 @@ __all__ = [
     "claim_task",
     "complete_task",
     "create_process_instance",
+    "deliver_message",
     "error_process_instance",
     "execute_command",
     "execute_query",

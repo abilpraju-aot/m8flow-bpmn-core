@@ -10,6 +10,7 @@ from m8flow_core.application.commands import (
     ClaimTaskCommand,
     CompleteTaskCommand,
     CreateProcessInstanceCommand,
+    DeliverMessageCommand,
     ErrorProcessInstanceCommand,
     ImportBpmnProcessDefinitionCommand,
     InitializeProcessInstanceFromDefinitionCommand,
@@ -32,6 +33,7 @@ from m8flow_core.application.queries import (
     ListSuspendedProcessInstancesQuery,
     ListTerminatedProcessInstancesQuery,
 )
+from m8flow_core.services.message_delivery import deliver_message
 from m8flow_core.services.process_definitions import (
     import_bpmn_process_definition,
 )
@@ -90,6 +92,17 @@ def execute_command(
     command: object,
 ) -> object:
     with _session_scope(session_or_connection) as session:
+        if isinstance(command, DeliverMessageCommand):
+            return deliver_message(
+                session,
+                tenant_id=command.tenant_id,
+                delivery_id=command.delivery_id,
+                message_name=command.message_name,
+                user_id=command.user_id,
+                payload=command.payload,
+                bpmn_process_definition_id=command.bpmn_process_definition_id,
+                process_instance_id=command.process_instance_id,
+            )
         if isinstance(command, ClaimTaskCommand):
             return claim_task(
                 session,

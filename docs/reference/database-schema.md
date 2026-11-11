@@ -1,11 +1,10 @@
 # Database schema
 
 This page lists the tables that m8flow-core's ORM models define. The library
-ships the models in `m8flow_core.models` and, in `alembic/versions/`, a single
-Alembic baseline revision that creates them. The baseline, `k2l3m4n5o6p7`, has
-no parent and is the current head. It builds the whole 1.0 schema on an empty
-database; see [Upgrade to 1.0](../how-to/upgrade-to-1.0.md) for existing
-databases.
+ships the models in `m8flow_core.models` and revisions in `alembic/versions/`.
+The first revision, `k2l3m4n5o6p7`, builds the 1.0 schema on an empty
+database. Revision `9c2e8f415b70` adds external message correlation. Run
+`alembic upgrade head` to apply all available revisions.
 
 Table and column names are part of the compatibility contract, because host
 applications such as m8flow share the database. Renaming or removing one is a
@@ -48,7 +47,27 @@ The library defines the following tables:
 | `process_instance_event` | `ProcessInstanceEventModel` | Yes | Event history: `event_type`, `category`, `occurred_at`, and the acting user. `event_type` has no database constraint, so historical values stay readable |
 | `process_instance_metadata` | `ProcessInstanceMetadataModel` | Yes | Key and value pairs, including task payload values |
 | `scheduler_job` | `SchedulerJobModel` | Yes | Due timers and retries. [About scheduling](../explanation/scheduling.md#the-scheduler-job-table) lists its columns. |
+| `message_subscription` | `MessageSubscriptionModel` | Yes | Waiting intermediate message catches and their correlation keys |
+| `message_delivery` | `MessageDeliveryModel` | Yes | Committed delivery receipts, unique by delivery ID in a tenant |
 | `future_task` | `FutureTaskModel` | Yes | Runtime tasks waiting to run, with `run_at` and `queued_to_run_at` |
+
+## Message correlation
+
+- `process_instance.message_correlation_enabled` opts the instance into
+  subscription maintenance and coordinated runtime writes. Existing rows
+  default to false. Subscription indexing starts at workflow initialization,
+  so the migration leaves previously initialized snapshots without subscriptions.
+- `message_subscription` identifies a catch by `m8f_tenant_id`,
+  `process_instance_id`, and `task_guid`. It stores the
+  `bpmn_process_definition_id`, `message_name`, and its hash.
+  `message_fields` and `correlation_values` are ordered JSON arrays.
+  `message_fields_hash` identifies the field list and `correlation_hash`
+  indexes the field list and values together.
+- `message_delivery` stores the `delivery_id`, `delivery_hash`,
+  `request_hash`, `message_name`, `process_instance_id`, `task_guid`,
+  `user_id`, and UTC `occurred_at`. Its tenant-scoped unique index on the
+  delivery ID hash arbitrates concurrent retries. The receipt and the
+  workflow advance commit together.
 
 ## Tenant-scoped JSON payloads
 

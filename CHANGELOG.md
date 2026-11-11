@@ -9,6 +9,11 @@ lists its changes under **Added**, **Changed**, **Deprecated**, **Removed**,
 
 ### Added
 
+- External delivery to intermediate BPMN message catches through
+  `DeliverMessageCommand`. Standard BPMN correlation keys select one
+  tenant-scoped wait. Delivery receipts prevent a committed message from
+  advancing the workflow twice. Apply Alembic revision `9c2e8f415b70`.
+
 - BPMN call activities through the tenant-aware `CallActivityResolver` API.
   Called child workflows are stored inside the parent workflow snapshot and
   their human tasks use the existing parent process instance worklist.

@@ -28,6 +28,17 @@ class CompleteTaskCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class DeliverMessageCommand:
+    tenant_id: str
+    delivery_id: str
+    message_name: str
+    user_id: int
+    payload: dict[str, Any]
+    bpmn_process_definition_id: int | None = None
+    process_instance_id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class RecordProcessInstanceEventCommand:
     tenant_id: str
     process_instance_id: int

@@ -6,6 +6,7 @@ from m8flow_core.models.bpmn_process_definition import (
 from m8flow_core.models.future_task import FutureTaskModel
 from m8flow_core.models.group import GroupModel
 from m8flow_core.models.json_data import JsonDataModel
+from m8flow_core.models.message import MessageDeliveryModel, MessageSubscriptionModel
 from m8flow_core.models.permission_assignment import (
     PermissionAction,
     PermissionAssignmentModel,
@@ -58,6 +59,8 @@ __all__ = [
     "JsonDataModel",
     "M8fTenantScopedMixin",
     "M8flowTenantModel",
+    "MessageDeliveryModel",
+    "MessageSubscriptionModel",
     "PermissionAction",
     "PermissionAssignmentModel",
     "PermissionTargetModel",

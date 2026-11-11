@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:model="urn:m8flow:external-message" id="Definitions_External"
+    targetNamespace="urn:m8flow:external-message">
+  <message id="PaymentConfirmed" name="payment.confirmed"/>
+  <correlationProperty id="CaseId">
+    <correlationPropertyRetrievalExpression messageRef="model:PaymentConfirmed">
+      <messagePath xsi:type="tFormalExpression">case_id</messagePath>
+    </correlationPropertyRetrievalExpression>
+  </correlationProperty>
+  <correlationProperty id="Region">
+    <correlationPropertyRetrievalExpression messageRef="PaymentConfirmed">
+      <messagePath xsi:type="tFormalExpression">region</messagePath>
+    </correlationPropertyRetrievalExpression>
+  </correlationProperty>
+  <process id="Process_Payment" isExecutable="true">
+    <startEvent id="StartEvent_1"/>
+    <sequenceFlow id="Flow_Start" sourceRef="StartEvent_1" targetRef="Catch_Payment"/>
+    <intermediateCatchEvent id="Catch_Payment">
+      <messageEventDefinition messageRef="model:PaymentConfirmed"/>
+    </intermediateCatchEvent>
+    <sequenceFlow id="Flow_End" sourceRef="Catch_Payment" targetRef="EndEvent_1"/>
+    <endEvent id="EndEvent_1"/>
+    <correlationSubscription correlationKeyRef="model:PaymentKey">
+      <correlationPropertyBinding correlationPropertyRef="model:CaseId">
+        <dataPath xsi:type="tFormalExpression">case_id</dataPath>
+      </correlationPropertyBinding>
+      <correlationPropertyBinding correlationPropertyRef="Region">
+        <dataPath xsi:type="tFormalExpression">region_code</dataPath>
+      </correlationPropertyBinding>
+    </correlationSubscription>
+  </process>
+  <collaboration id="PaymentCollaboration">
+    <participant id="ExternalSender"/>
+    <participant id="PaymentReceiver" processRef="model:Process_Payment"/>
+    <messageFlow id="MessageFlow_Payment" sourceRef="ExternalSender"
+        targetRef="Catch_Payment" messageRef="model:PaymentConfirmed"/>
+    <correlationKey id="PaymentKey" name="Payment">
+      <correlationPropertyRef>model:CaseId</correlationPropertyRef>
+      <correlationPropertyRef>Region</correlationPropertyRef>
+    </correlationKey>
+  </collaboration>
+</definitions>

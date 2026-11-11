@@ -59,6 +59,8 @@ def test_migrations_reuse_existing_secret_table_and_foreign_alembic_state(
     inspector = inspect(create_engine(database_url))
     assert "secret" in inspector.get_table_names()
     assert "work_item" in inspector.get_table_names()
+    assert "message_subscription" in inspector.get_table_names()
+    assert "message_delivery" in inspector.get_table_names()
     assert "m8flow_sample_app_alembic_version" in inspector.get_table_names()
 
     verification_engine = create_engine(database_url)
@@ -70,7 +72,7 @@ def test_migrations_reuse_existing_secret_table_and_foreign_alembic_state(
                     "m8flow_sample_app_alembic_version"
                 )
             ).scalar()
-            == "20260706_0002"
+            == "20261111_0003"
         )
         assert (
             connection.execute(

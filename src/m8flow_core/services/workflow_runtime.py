@@ -67,6 +67,16 @@ from m8flow_core.services.call_activities import (
 from m8flow_core.services.lane_assignment import (
     assign_work_item_potential_owners,
 )
+from m8flow_core.services.message_correlation import (
+    BPMN,
+    MESSAGE_CORRELATION_EXTENSION,
+    compile_message_catches,
+)
+from m8flow_core.services.message_subscriptions import (
+    lock_message_enabled_instance,
+    message_catch_rules,
+    sync_message_subscriptions,
+)
 from m8flow_core.services.process_instances import (
     create_process_instance,
     error_process_instance,
@@ -448,7 +458,9 @@ def advance_process_instance_workflow(
     completed_task_guid: str,
     completed_at: datetime | None = None,
 ) -> ProcessInstanceModel:
-    process_instance = _load_process_instance(
+    process_instance = lock_message_enabled_instance(
+        session, tenant_id, process_instance_id
+    ) or _load_process_instance(
         session,
         tenant_id=tenant_id,
         process_instance_id=process_instance_id,
@@ -456,6 +468,11 @@ def advance_process_instance_workflow(
     if process_instance.workflow_state_json is None:
         return process_instance
     if process_instance.has_terminal_status():
+        return process_instance
+    if (
+        process_instance.message_correlation_enabled
+        and process_instance.status == ProcessInstanceStatus.suspended.value
+    ):
         return process_instance
 
     occurred_at = _resolve_timestamp(completed_at)
@@ -486,31 +503,12 @@ def advance_process_instance_workflow(
         occurred_at=occurred_at,
     )
 
-    _persist_workflow_state(
-        session,
-        process_instance,
-        workflow,
-        occurred_at=occurred_at,
-    )
-    _sync_inactive_work_items(
+    _persist_advanced_workflow(
         session,
         process_instance=process_instance,
         workflow=workflow,
         occurred_at=occurred_at,
     )
-    _materialize_ready_manual_tasks(
-        session,
-        process_instance=process_instance,
-        workflow=workflow,
-        occurred_at=occurred_at,
-    )
-    _update_process_instance_status_from_workflow(
-        process_instance,
-        workflow,
-        occurred_at=occurred_at,
-    )
-
-    session.flush()
     return process_instance
 
 
@@ -527,26 +525,29 @@ def _prepare_process_instance_from_definition(
     started_at: datetime | None,
     bpmn_process_id: str | None,
 ) -> tuple[ProcessInstanceModel, str]:
-    autonomous_baseline = _prepare_process_instance_baseline_in_independent_session(
-        session,
-        tenant_id=tenant_id,
-        process_definition=process_definition,
-        process_model_identifier=process_model_identifier,
-        process_initiator_id=process_initiator_id,
-        submission_metadata=submission_metadata,
-        summary=summary,
-        process_version=process_version,
-        started_at=started_at,
-        bpmn_process_id=bpmn_process_id,
-    )
-    if autonomous_baseline is not None:
-        process_instance_id, selected_process_id = autonomous_baseline
-        process_instance = _load_process_instance(
+    source = process_definition.source_bpmn_xml
+    catches = compile_message_catches(_coerce_xml_bytes(source)) if source else {}
+    if not (catches.get(bpmn_process_id) if bpmn_process_id else catches):
+        autonomous_baseline = _prepare_process_instance_baseline_in_independent_session(
             session,
             tenant_id=tenant_id,
-            process_instance_id=process_instance_id,
+            process_definition=process_definition,
+            process_model_identifier=process_model_identifier,
+            process_initiator_id=process_initiator_id,
+            submission_metadata=submission_metadata,
+            summary=summary,
+            process_version=process_version,
+            started_at=started_at,
+            bpmn_process_id=bpmn_process_id,
         )
-        return process_instance, selected_process_id
+        if autonomous_baseline is not None:
+            process_instance_id, selected_process_id = autonomous_baseline
+            process_instance = _load_process_instance(
+                session,
+                tenant_id=tenant_id,
+                process_instance_id=process_instance_id,
+            )
+            return process_instance, selected_process_id
 
     return _prepare_process_instance_from_definition_in_session(
         session,
@@ -817,31 +818,12 @@ def retry_errored_service_task_workflow_if_needed(
         occurred_at=timestamp,
         autonomous_failure_state_persistence=True,
     )
-    _persist_workflow_state(
-        session,
-        process_instance,
-        workflow,
-        occurred_at=timestamp,
-    )
-    _sync_inactive_work_items(
+    _persist_advanced_workflow(
         session,
         process_instance=process_instance,
         workflow=workflow,
         occurred_at=timestamp,
     )
-    _materialize_ready_manual_tasks(
-        session,
-        process_instance=process_instance,
-        workflow=workflow,
-        occurred_at=timestamp,
-    )
-    _update_process_instance_status_from_workflow(
-        process_instance,
-        workflow,
-        occurred_at=timestamp,
-    )
-
-    session.flush()
     return process_instance
 
 
@@ -908,7 +890,9 @@ def _refresh_waiting_process_instance_workflow(
     process_instance_id: int,
     occurred_at: datetime | None = None,
 ) -> ProcessInstanceModel:
-    process_instance = _load_process_instance(
+    process_instance = lock_message_enabled_instance(
+        session, tenant_id, process_instance_id
+    ) or _load_process_instance(
         session,
         tenant_id=tenant_id,
         process_instance_id=process_instance_id,
@@ -916,6 +900,11 @@ def _refresh_waiting_process_instance_workflow(
     if process_instance.workflow_state_json is None:
         return process_instance
     if process_instance.has_terminal_status():
+        return process_instance
+    if (
+        process_instance.message_correlation_enabled
+        and process_instance.status == ProcessInstanceStatus.suspended.value
+    ):
         return process_instance
 
     timestamp = _resolve_timestamp(occurred_at)
@@ -937,31 +926,12 @@ def _refresh_waiting_process_instance_workflow(
         autonomous_failure_state_persistence=True,
     )
 
-    _persist_workflow_state(
-        session,
-        process_instance,
-        workflow,
-        occurred_at=timestamp,
-    )
-    _sync_inactive_work_items(
+    _persist_advanced_workflow(
         session,
         process_instance=process_instance,
         workflow=workflow,
         occurred_at=timestamp,
     )
-    _materialize_ready_manual_tasks(
-        session,
-        process_instance=process_instance,
-        workflow=workflow,
-        occurred_at=timestamp,
-    )
-    _update_process_instance_status_from_workflow(
-        process_instance,
-        workflow,
-        occurred_at=timestamp,
-    )
-
-    session.flush()
     return process_instance
 
 
@@ -972,7 +942,9 @@ def repair_process_instance_runtime_representation(
     process_instance_id: int,
     occurred_at: datetime | None = None,
 ) -> ProcessInstanceModel:
-    process_instance = _load_process_instance(
+    process_instance = lock_message_enabled_instance(
+        session, tenant_id, process_instance_id
+    ) or _load_process_instance(
         session,
         tenant_id=tenant_id,
         process_instance_id=process_instance_id,
@@ -1013,8 +985,11 @@ def _run_workflow_with_service_task_failure_handling(
     try:
         workflow.run_all(halt_on_manual=True)
     except ServiceTaskExecutionError:
-        if autonomous_failure_state_persistence and (
-            _persist_service_task_failure_state_in_independent_session(
+        if (
+            autonomous_failure_state_persistence
+            and not process_instance.message_correlation_enabled
+            and not _has_message_catches(workflow)
+            and _persist_service_task_failure_state_in_independent_session(
                 session,
                 tenant_id=tenant_id,
                 process_instance_id=process_instance.id,
@@ -1285,12 +1260,14 @@ def _build_workflow(
     call_activity_resolver: CallActivityResolver | None = None,
     call_activity_context: CallActivityContext | None = None,
 ) -> BpmnWorkflow:
+    source = _coerce_xml_bytes(bpmn_xml)
+    message_catches = compile_message_catches(source)
     parser = _RuntimeSpiffBpmnParser(
         validator=None,
         use_noop_dmn_engine=dmn_xml is None,
     )
     parser.add_bpmn_str(
-        _coerce_xml_bytes(bpmn_xml),
+        source,
         filename="runtime-workflow.bpmn",
     )
     _load_called_process_definitions(
@@ -1315,7 +1292,31 @@ def _build_workflow(
     else:
         selected_process_id = bpmn_process_id
 
+    catches = message_catches.get(selected_process_id, {})
+    if catches:
+        process_node = parser.get_process_parser(selected_process_id).node
+        for node in process_node.findall(BPMN + "intermediateCatchEvent"):
+            rule = catches.get(node.get("id"))
+            if rule is not None:
+                # Spiff resolves messageRef by ID, not by QName.
+                node.find(BPMN + "messageEventDefinition").set(
+                    "messageRef", rule.message_id
+                )
     spec = parser.get_spec(selected_process_id)
+    for catch_id, rule in catches.items():
+        task_spec = spec.task_specs.get(catch_id)
+        if task_spec is None:
+            continue  # The catch is unreachable from this process's start.
+        task_spec.extensions = {
+            **getattr(task_spec, "extensions", {}),
+            MESSAGE_CORRELATION_EXTENSION: {
+                "message_name": rule.message_name,
+                "bindings": rule.bindings,
+            },
+        }
+        # M8Flow matches every component before calling this specific catch.
+        task_spec.event_definition.correlation_properties = []
+        task_spec.event_definition.process_correlations = []
     subprocess_specs = parser.get_subprocess_specs(selected_process_id)
     return BpmnWorkflow(
         spec,
@@ -1455,6 +1456,40 @@ def _restore_workflow(
     return workflow
 
 
+def _persist_advanced_workflow(
+    session: Session,
+    *,
+    process_instance: ProcessInstanceModel,
+    workflow: BpmnWorkflow,
+    occurred_at: datetime,
+) -> None:
+    _persist_workflow_state(
+        session,
+        process_instance,
+        workflow,
+        occurred_at=occurred_at,
+    )
+    _sync_inactive_work_items(
+        session,
+        process_instance=process_instance,
+        workflow=workflow,
+        occurred_at=occurred_at,
+    )
+    _materialize_ready_manual_tasks(
+        session,
+        process_instance=process_instance,
+        workflow=workflow,
+        occurred_at=occurred_at,
+    )
+    _update_process_instance_status_from_workflow(
+        process_instance,
+        workflow,
+        occurred_at=occurred_at,
+    )
+
+    session.flush()
+
+
 def _persist_workflow_state(
     session: Session,
     process_instance: ProcessInstanceModel,
@@ -1483,6 +1518,10 @@ def _persist_workflow_state(
         serialized_workflow=serialized_workflow,
         occurred_at=occurred_at,
     )
+    if not process_instance.message_correlation_enabled:
+        process_instance.message_correlation_enabled = _has_message_catches(workflow)
+    if process_instance.message_correlation_enabled:
+        sync_message_subscriptions(session, process_instance, workflow)
     _sync_intermediate_timer_scheduler_job(
         session,
         process_instance=process_instance,
@@ -1505,6 +1544,10 @@ def _persist_workflow_recovery_state(
         serialized_workflow=serialized_workflow,
         serialized_state=serialized_state,
     )
+
+
+def _has_message_catches(workflow: BpmnWorkflow) -> bool:
+    return any(message_catch_rules(spec) for spec in workflow.spec.task_specs.values())
 
 
 def _serialize_workflow_dict(workflow: BpmnWorkflow) -> dict[str, Any]:
@@ -2207,7 +2250,11 @@ def _upsert_work_item(
             completed=False,
         )
         session.add(work_item)
-    else:
+    elif (
+        not process_instance.message_correlation_enabled
+        or work_item.completed
+        or work_item.task_status != WorkItemState.CLAIMED.value
+    ):
         work_item.task_guid = task_model.guid
         prepare_work_item_for_ready_state(
             work_item,
